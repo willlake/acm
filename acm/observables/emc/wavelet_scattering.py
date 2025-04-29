@@ -8,7 +8,7 @@ class WaveletScatteringTransform(BaseObservable):
     """
     def __init__(self, phase_correction=False, **kwargs):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.stat_name = 'wst_apr7'
+        self.stat_name = 'wst'
         self.sep_name = 'coeff_idx'
 
         if phase_correction and hasattr(self, 'compute_phase_correction'):
@@ -65,4 +65,6 @@ class WaveletScatteringTransform(BaseObservable):
     @property
     def model_fn(self):
         # return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/WaveletScatteringTransform/cosmo+hod/last.ckpt'
-        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/test/apr7/wst_apr7.ckpt'
+        # return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/test/apr7/wst_apr7.ckpt'
+        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/test/apr11/WaveletScatteringTransform/last.ckpt'
+        # return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/best/WaveletScatteringTransform/last.ckpt'

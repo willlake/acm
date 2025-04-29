@@ -170,6 +170,17 @@ class CombinedObservable:
         """
         return np.cov(self.small_box_y.T) / divide_factor
 
+    def get_phase_matrix(self, divide_factor=64):
+        """
+        Phase error matrix of the combination of observables.
+
+        Args:
+            divide_factor (int): Divide the phase matrix by this value
+            to account for the volume difference between the small boxes and the target
+            simulation.
+        """
+        return np.cov(self.small_box_y.T) / divide_factor
+
     def get_covariance_correction(self, n_s, n_d, n_theta=None, method='percival'):
         """
         Correction factor to debias de inverse covariance matrix.

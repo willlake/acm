@@ -16,8 +16,8 @@ class BaseObservable(ABC):
         select_indices: list = [],
         select_coordinates: dict = {},
         slice_coordinates: dict = {},
+        train: bool = False,
     ):
-        print(self.__class__.__name__)
         if select_indices:
             assert type(select_indices) == list, "select_indices should be a list of indices"
         self.select_indices = {'bin_idx': select_indices} if select_indices else {}
@@ -36,14 +36,11 @@ class BaseObservable(ABC):
             self.select_filters.update(self.select_coordinates)
         if self.select_indices is not None:
             self.select_filters.update(self.select_indices)
-        # self.select_filters = {
-        #     **self.select_mocks,
-        #     **self.select_coordinates,
-        #     **self.select_indices
-        # }
+
         self.slice_filters = self.slice_coordinates
 
-        self.model = self.load_model()
+        if not train:
+            self.model = self.load_model()
         self.separation = self.load_separation()
         
     @property
@@ -146,6 +143,7 @@ class BaseObservable(ABC):
             coords.update(self.coordinates_indices)
         else:
             coords.update(self.coordinates)
+        print(coords.keys())
         coords_shape = tuple(len(v) for k, v in coords.items())
         dimensions = list(coords.keys())
         small_box_y = small_box_y.reshape(*coords_shape)
@@ -174,9 +172,16 @@ class BaseObservable(ABC):
         Load trained theory model from checkpoint file.
         """
         from sunbird.emulators import FCN
-        model = FCN.load_from_checkpoint(self.model_fn, strict=True)
+        try:
+            model = FCN.load_from_checkpoint(self.model_fn, strict=True)
+        except:
+            raise ValueError(
+            f"Model {self.model_fn} not found. If you are training a "
+            "new model, please set the `train` argument to True at "
+            "class initialization."
+            )
         model = model.eval().to('cpu')
-        if self.stat_name == 'minkowski':
+        if self.stat_name.startswith('minkowski'):
             from sunbird.data.transforms_array import WeiLiuInputTransform, WeiLiuOutputTransForm
             model.transform_output = WeiLiuOutputTransForm()
             model.transform_input = WeiLiuInputTransform()
@@ -288,6 +293,14 @@ class BaseObservable(ABC):
         """
         return np.cov(self.small_box_y.T) / divide_factor
 
+    def get_phase_matrix(self):
+        """
+        Phase error matrix to be used instead of the phase correction.
+        This is simpler to calculate but might excesively increase the 
+        error budget.
+        """
+        return np.cov(self.small_box_y().T) / 64
+
     def get_covariance_correction(self, n_s, n_d, n_theta=None, method='percival'):
         """
         Correction factor to debias de inverse covariance matrix.
@@ -301,8 +314,12 @@ class BaseObservable(ABC):
         Returns:
             float: Correction factor
         """
+        assert method in ['percival', 'percival-fisher', 'hartlap'], \
+            "Method should be one of 'percival', 'percival-fisher' or 'hartlap'"
         if method == 'percival':
             B = (n_s - n_d - 2) / ((n_s - n_d - 1)*(n_s - n_d - 4))
             return (n_s - 1)*(1 + B*(n_d - n_theta))/(n_s - n_d + n_theta - 1)
+        elif method == 'percival-fisher':
+            return (n_s - 1)/(n_s - n_d + n_theta - 1)
         elif _method == 'hartlap':
             return (n_s - 1)/(n_s - n_d - 2)
