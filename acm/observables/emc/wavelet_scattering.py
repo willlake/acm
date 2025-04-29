@@ -64,7 +64,4 @@ class WaveletScatteringTransform(BaseObservable):
 
     @property
     def model_fn(self):
-        # return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/WaveletScatteringTransform/cosmo+hod/last.ckpt'
-        # return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/test/apr7/wst_apr7.ckpt'
-        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/test/apr11/WaveletScatteringTransform/last.ckpt'
-        # return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/best/WaveletScatteringTransform/last.ckpt'
+        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/best/WaveletScatteringTransform/last.ckpt'
