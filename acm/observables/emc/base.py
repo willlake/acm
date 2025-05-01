@@ -143,7 +143,6 @@ class BaseObservable(ABC):
             coords.update(self.coordinates_indices)
         else:
             coords.update(self.coordinates)
-        print(coords.keys())
         coords_shape = tuple(len(v) for k, v in coords.items())
         dimensions = list(coords.keys())
         small_box_y = small_box_y.reshape(*coords_shape)

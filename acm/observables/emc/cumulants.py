@@ -8,8 +8,8 @@ class CumulantGeneratingFunction(BaseObservable):
     """
     def __init__(self, phase_correction=False, **kwargs):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.stat_name = 'cgf_r10'
-        self.sep_name = 'lambda'
+        self.stat_name = 'cgf'
+        self.sep_name = 'bin_idx'
 
         if phase_correction and hasattr(self, 'compute_phase_correction'):
             self.logger.info('Computing phase correction.')
@@ -24,7 +24,7 @@ class CumulantGeneratingFunction(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)) + list(range(100, 127)) + list(range(130, 182)),
-            'hod_idx': list(range(100)),
+            'hod_idx': list(range(350)),
         }
 
     @property
@@ -34,7 +34,7 @@ class CumulantGeneratingFunction(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)),
-            'hod_idx': list(range(100)),
+            'hod_idx': list(range(350)),
         }
 
     @property
@@ -64,4 +64,5 @@ class CumulantGeneratingFunction(BaseObservable):
 
     @property
     def model_fn(self):
-        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/CumulantGeneratingFunction/cosmo+hod/last.ckpt'
+        # return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/CumulantGeneratingFunction/cosmo+hod/last.ckpt'
+        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/best/CumulantGeneratingFunction/last.ckpt'
