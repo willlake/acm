@@ -6,6 +6,17 @@ import numpy as np
 import torch
 
 
+class BaseModel(ABC):
+    """
+    Base class for the Emulator's Mock Challenge models.
+    """
+    def __init__(self, observable):
+        self.observable = observable
+
+    def get_prediction(self, x):
+        return self.observable.get_model_prediction(x)
+
+
 class BaseObservable(ABC):
     """
     Base class for the Emulator's Mock Challenge observables.
@@ -40,7 +51,7 @@ class BaseObservable(ABC):
         self.slice_filters = self.slice_coordinates
 
         if not train:
-            self.model = self.load_model()
+            self.checkpoint = self.load_model_checkpoint()
         self.separation = self.load_separation()
         
     @property
@@ -166,10 +177,19 @@ class BaseObservable(ABC):
             select_filters=self.select_filters, slice_filters=self.slice_filters
         ).values.reshape(-1)
 
-    def load_model(self):
+    @property
+    def model(self):
+        """
+        Theory model of the observable.
+        """
+        print('loading model class')
+        return BaseModel(self)
+
+    def load_model_checkpoint(self):
         """
         Load trained theory model from checkpoint file.
         """
+        print(f"Loading model checkpoint from {self.model_fn}")
         from sunbird.emulators import FCN
         try:
             model = FCN.load_from_checkpoint(self.model_fn, strict=True)
@@ -186,23 +206,46 @@ class BaseObservable(ABC):
             model.transform_input = WeiLiuInputTransform()
         return model
 
-    @property
-    def emulator_error(self):
+    def get_emulator_error(self, method: ['median', 'std'] = 'median'):
         """
         Emulator error.
         """
-        fn = self.emulator_error_fname()
-        error = np.load(fn, allow_pickle=True).item()['emulator_error']
-        coords = self.coordinates_indices if self.select_indices else self.coordinates
-        coords_shape = tuple(len(v) for k, v in coords.items())
-        dimensions = list(self.coords.keys())
-        error = error.reshape(*coords_shape)
-        return convert_to_summary(
-            data=error, dimensions=dimensions, coords=coords,
-            select_filters=self.select_filters, slice_filters=self.slice_filters
-        ).values.reshape(-1)
+        res = self.get_model_residuals()  # pred_y - true_y
+        if method == 'median':
+            error = np.median(np.abs(res), axis=0)
+            return error
+        elif method == 'std':
+            error = np.std(res, axis=0)
+            return error
+        # fn = self.emulator_error_fname()
+        # error = np.load(fn, allow_pickle=True).item()['emulator_error']
+        # coords = self.coordinates_indices if self.select_indices else self.coordinates
+        # coords_shape = tuple(len(v) for k, v in coords.items())
+        # dimensions = list(self.coords.keys())
+        # error = error.reshape(*coords_shape)
+        # return convert_to_summary(
+        #     data=error, dimensions=dimensions, coords=coords,
+        #     select_filters=self.select_filters, slice_filters=self.slice_filters
+        # ).values.reshape(-1)
 
-    def get_emulator_error(self, method: ['mae', 'cov'] = 'mae'):
+    def get_emulator_error_matrix(self, diagonalize=True, method: ['median', 'std'] = 'median'):
+        """
+        Get the covariance matrix of the emulator error.
+        """
+        res =  self.get_model_residuals()  # pred_y - true_y
+        if method == 'median':
+            error = np.median(np.abs(res), axis=0)
+            if diagonalize is False:
+                raise ValueError('Method "median" only works with diagonalize=True')
+            return np.diag(error ** 2)
+        elif method == 'std':
+            cov = np.cov(res.T)
+            if diagonalize is False:
+                return cov
+            else:
+                return np.diag(np.diag(cov))
+
+    def get_model_residuals(self):
         """
         Calculate the emulator error from the test set of the Latin hypercube. 
         
@@ -235,10 +278,7 @@ class BaseObservable(ABC):
         test_x = test_x.reshape(n_samples, -1)
         test_y = test_y.reshape(n_samples, -1)
         pred_y = observable.get_model_prediction(test_x, batch=True)
-        if method == 'mae':
-            return np.median(np.abs(test_y - pred_y), axis=0)
-        elif method == 'cov':
-            return np.cov(test_y - pred_y, rowvar=False)
+        return test_y - pred_y
 
     def load_separation(self):
         """
@@ -258,7 +298,7 @@ class BaseObservable(ABC):
             np.ndarray: Model prediction.
         """
         with torch.no_grad():
-            prediction = self.model.get_prediction(torch.Tensor(x))
+            prediction = self.checkpoint.get_prediction(torch.Tensor(x))
             prediction = prediction.numpy()
         if hasattr(self, 'phase_correction'):
             prediction = self.apply_phase_correction(prediction)

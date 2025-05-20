@@ -106,13 +106,22 @@ class CombinedObservable:
         """
         return np.concatenate([obs.get_model_prediction(x) for obs in self.observables], axis=-1)
 
-
-    @property
-    def emulator_error(self):
+    def get_emulator_error(self, method: ['median', 'std'] = 'median'):
         """
         Emulator error of the combination of observables.
         """
-        return np.concatenate([obs.emulator_error for obs in self.observables], axis=0)
+        return np.concatenate([obs.get_emulator_error(method) for obs in self.observables], axis=0)
+
+    def get_model_residuals(self):
+        """
+        Get the residuals of the model.
+        
+        Returns
+        -------
+        array_like
+            Residuals of the model.
+        """
+        return np.concatenate([obs.get_model_residuals() for obs in self.observables], axis=0)
 
     @property
     def coords_model(self):
@@ -149,15 +158,14 @@ class CombinedObservable:
         """
         return [obs.model_fn for obs in self.observables]
 
-    def get_emulator_error(self, method: ['mae', 'cov'] = 'mae'):
+    def get_emulator_error_matrix(self, diagonalize=True, method: ['median', 'std'] = 'median'):
         """
-        Calculate the emulator error from a subset of the Latin hypercube,
-        which we treat as the test set.
-
-        We make a new instance of the class with the test set filters and
-        compare the emulator prediction to the true values.
+        Get the covariance matrix of the emulator error.
         """
-        return np.concatenate([obs.get_emulator_error(method) for obs in self.observables], axis=0)
+        error = self.get_emulator_error(method)
+        if not diagonalize:
+            raise NotImplementedError('Non-diagonalized emulator error matrix not implemented yet.')
+        return np.diag(error ** 2)
 
     def get_covariance_matrix(self, divide_factor=64):
         """
