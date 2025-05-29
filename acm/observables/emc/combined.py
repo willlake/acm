@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import linalg
 from .base import BaseObservable
 
 
@@ -112,17 +113,6 @@ class CombinedObservable:
         """
         return np.concatenate([obs.get_emulator_error(method) for obs in self.observables], axis=0)
 
-    def get_model_residuals(self):
-        """
-        Get the residuals of the model.
-        
-        Returns
-        -------
-        array_like
-            Residuals of the model.
-        """
-        return np.concatenate([obs.get_model_residuals() for obs in self.observables], axis=0)
-
     @property
     def coords_model(self):
         """
@@ -158,14 +148,43 @@ class CombinedObservable:
         """
         return [obs.model_fn for obs in self.observables]
 
-    def get_emulator_error_matrix(self, diagonalize=True, method: ['median', 'std'] = 'median'):
+    def get_model_residuals(self, select_mocks=None):
+        """
+        Get the residuals of the model.
+        
+        Returns
+        -------
+        array_like
+            Residuals of the model.
+        """
+        return np.concatenate([obs.get_model_residuals(select_mocks) for obs in self.observables], axis=1)
+
+    def get_emulator_error_matrix(self, select_mocks=None, diagonalize=True,
+        method: ['median', 'std'] = 'median', block_diagonal=False):
         """
         Get the covariance matrix of the emulator error.
         """
-        error = self.get_emulator_error(method)
-        if not diagonalize:
-            raise NotImplementedError('Non-diagonalized emulator error matrix not implemented yet.')
-        return np.diag(error ** 2)
+        if block_diagonal:
+            covs = []
+            for obs in self.observables:
+                cov = obs.get_emulator_error_matrix(
+                    select_mocks=select_mocks, diagonalize=diagonalize, method=method
+                )
+                covs.append(cov)
+            return linalg.block_diag(*covs)
+        else:
+            res = self.get_model_residuals(select_mocks=select_mocks)
+            if method == 'median':
+                error = np.median(np.abs(res), axis=0)
+                if diagonalize is False:
+                    raise ValueError('Method "median" only works with diagonalize=True')
+                return np.diag(error ** 2)
+            elif method == 'std':
+                cov = np.cov(res.T)
+                if diagonalize is False:
+                    return cov
+                else:
+                    return np.diag(np.diag(cov))
 
     def get_covariance_matrix(self, divide_factor=64):
         """

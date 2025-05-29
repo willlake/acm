@@ -9,7 +9,7 @@ class DTVoidGalaxyCorrelationFunctionMultipoles(BaseObservable):
     """
     def __init__(self, phase_correction=False, **kwargs):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.stat_name = 'dt_gv_may8'
+        self.stat_name = 'dt_gv'
         self.sep_name = 's'
 
         if phase_correction and hasattr(self, 'compute_phase_correction'):
@@ -25,7 +25,7 @@ class DTVoidGalaxyCorrelationFunctionMultipoles(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)) + list(range(100, 127)) + list(range(130, 182)),
-            'hod_idx': list(range(100)),
+            'hod_idx': list(range(270)),
         }
 
     @property
@@ -35,7 +35,7 @@ class DTVoidGalaxyCorrelationFunctionMultipoles(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)),
-            'hod_idx': list(range(100)),
+            'hod_idx': list(range(270)),
         }
 
     @property
@@ -67,7 +67,8 @@ class DTVoidGalaxyCorrelationFunctionMultipoles(BaseObservable):
 
     @property
     def model_fn(self):
-        return '/pscratch/sd/d/dforero/emc/trained_models/DTvoids_gv/cosmo+hod/optuna/last.ckpt'
+        # return '/pscratch/sd/d/dforero/emc/trained_models/DTvoids_gv/cosmo+hod/optuna/last.ckpt'
+        return '/pscratch/sd/e/epaillas/emc/v1.1/trained_models/best/DTVoidGalaxyCorrelationFunctionMultipoles/last.ckpt'
 
     def create_lhc(self, n_hod=20, cosmos=None, phase_idx=0, seed_idx=0):
         """
@@ -126,7 +127,7 @@ class DTVoidGalaxyCorrelationFunctionMultipoles(BaseObservable):
         import numpy as np
         import glob
         y = []
-        data_dir = f'/pscratch/sd/d/dforero/projects/ac_emc/data/training_sets/dtfe6/tpcf/z0.5/full_prior2/small_onelos/'
+        data_dir = f'/pscratch/sd/d/dforero/projects/ac_emc/data/training_sets/dtfe6/tpcf/z0.5/full_prior2/small_onelos_hod466/'
         data_fns = glob.glob(f"{data_dir}/gv_tpcf_ph*.npy")
         for data_fn in data_fns:
             data = TwoPointCorrelationFunction.load(data_fn)[::4].select((0, 150))

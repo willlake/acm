@@ -177,19 +177,20 @@ class BaseObservable(ABC):
             select_filters=self.select_filters, slice_filters=self.slice_filters
         ).values.reshape(-1)
 
+    # def test_set_indices(self):
+
+
     @property
     def model(self):
         """
         Theory model of the observable.
         """
-        print('loading model class')
         return BaseModel(self)
 
     def load_model_checkpoint(self):
         """
         Load trained theory model from checkpoint file.
         """
-        print(f"Loading model checkpoint from {self.model_fn}")
         from sunbird.emulators import FCN
         try:
             model = FCN.load_from_checkpoint(self.model_fn, strict=True)
@@ -228,11 +229,12 @@ class BaseObservable(ABC):
         #     select_filters=self.select_filters, slice_filters=self.slice_filters
         # ).values.reshape(-1)
 
-    def get_emulator_error_matrix(self, diagonalize=True, method: ['median', 'std'] = 'median'):
+    def get_emulator_error_matrix(self, select_mocks=None, diagonalize=True,
+        method: ['median', 'std'] = 'median'):
         """
         Get the covariance matrix of the emulator error.
         """
-        res =  self.get_model_residuals()  # pred_y - true_y
+        res =  self.get_model_residuals(select_mocks=select_mocks)  # pred_y - true_y
         if method == 'median':
             error = np.median(np.abs(res), axis=0)
             if diagonalize is False:
@@ -245,7 +247,7 @@ class BaseObservable(ABC):
             else:
                 return np.diag(np.diag(cov))
 
-    def get_model_residuals(self):
+    def get_model_residuals(self, select_mocks=None):
         """
         Calculate the emulator error from the test set of the Latin hypercube. 
         
@@ -261,7 +263,8 @@ class BaseObservable(ABC):
             np.ndarray: Emulator error.
         """
         import numpy as np
-        select_mocks = self.test_set_indices
+        if select_mocks is None:
+            select_mocks = self.test_set_indices
         if self.select_indices:
             select_indices = self.select_indices['bin_idx']
         else:
@@ -279,6 +282,34 @@ class BaseObservable(ABC):
         test_y = test_y.reshape(n_samples, -1)
         pred_y = observable.get_model_prediction(test_x, batch=True)
         return test_y - pred_y
+
+    def get_model_residuals_list(self):
+        import numpy as np
+        residuals = []
+        if type(self.test_set_indices) == dict:
+            select_mocks = [self.test_set_indices]
+        else:
+            select_mocks = self.test_set_indices
+        if self.select_indices:
+            select_indices = self.select_indices['bin_idx']
+        else:
+            select_indices = {}
+        for i in range(len(select_mocks)):
+            observable = self.__class__(
+                select_mocks=select_mocks,
+                select_indices=select_indices,
+                select_coordinates=self.select_coordinates,
+                slice_coordinates=self.slice_coordinates)
+            test_x = observable.lhc_x
+            test_y = observable.lhc_y
+            # reshape to (n_samples, n_features)
+            n_samples = len(select_mocks['cosmo_idx']) * len(select_mocks['hod_idx'])
+            test_x = test_x.reshape(n_samples, -1)
+            test_y = test_y.reshape(n_samples, -1)
+            pred_y = observable.get_model_prediction(test_x, batch=True)
+            residuals.append(test_y - pred_y)
+        return np.asarray(residuals)
+
 
     def load_separation(self):
         """

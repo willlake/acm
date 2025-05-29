@@ -20,7 +20,7 @@ class GalaxyNumberDensity(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)) + list(range(100, 127)) + list(range(130, 182)),
-            'hod_idx': list(range(100)),
+            'hod_idx': list(range(350)),
         }
 
     @property
@@ -30,7 +30,7 @@ class GalaxyNumberDensity(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)),
-            'hod_idx': list(range(100)),
+            'hod_idx': list(range(350)),
         }
 
     @property
