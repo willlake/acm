@@ -56,3 +56,4 @@ class WaveletScatteringTransform(BaseObservable):
     @property
     def model_fn(self):
         return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/best/WaveletScatteringTransform/last.ckpt'
+        # return f'/pscratch/sd/g/gvalogia/emulators/last_25comb5.5comb5_renorm_fullreducedfinal.ckpt'

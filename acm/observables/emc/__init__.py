@@ -6,6 +6,7 @@ from .density_split_correlation import DensitySplitCorrelationFunctionMultipoles
 from .density_split_power import DensitySplitPowerSpectrumMultipoles
 from .delaunay_voids import DTVoidGalaxyCorrelationFunctionMultipoles
 from .voxel_voids import VoxelVoidGalaxyCorrelationFunctionMultipoles
+from .vide_voids import VIDEVoidGalaxyDensityProfile
 from .wavelet_scattering import WaveletScatteringTransform
 from .minkowski import MinkowskiFunctionals
 from .overdensity_pdf import GalaxyOverdensityPDF

@@ -2,14 +2,19 @@ from .base import BaseObservable
 import logging
 
 
-class GalaxyNumberDensity(BaseObservable):
+class VIDEVoidGalaxyDensityProfile(BaseObservable):
     """
-    Class for the Emulator's Mock Challenge galaxy number density.
+    Class for the Emulator's Mock Challenge void-galaxy density
+    profiles using the VIDE void finder.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, phase_correction=False, **kwargs):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.stat_name = 'number_density'
-        self.sep_name = 'bin_idx'
+        self.stat_name = 'vide_voids'
+        self.sep_name = 'r'
+
+        if phase_correction and hasattr(self, 'compute_phase_correction'):
+            self.logger.info('Computing phase correction.')
+            self.phase_correction = self.compute_phase_correction()
 
         super().__init__(**kwargs)
 
@@ -20,7 +25,7 @@ class GalaxyNumberDensity(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)) + list(range(100, 127)) + list(range(130, 182)),
-            'hod_idx': list(range(350)),
+            'hod_idx': list(range(100)),
         }
 
     @property
@@ -30,7 +35,16 @@ class GalaxyNumberDensity(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)),
-            'hod_idx': list(range(350)),
+            'hod_idx': list(range(100)),
+        }
+
+    @property
+    def small_box_indices(self):
+        """
+        Indices of the covariance samples, including variations in phase and HOD parameters.
+        """
+        return {
+            'phase_idx': list(range(1786)),
         }
 
     @property
@@ -39,7 +53,8 @@ class GalaxyNumberDensity(BaseObservable):
         Coordinates of the data and model vectors.
         """
         return{
-            'bin_idx': list(range(1)),
+            'stack': [0, 1, 2, 3],
+            'r': self.separation,
         }
     
     @property
@@ -47,8 +62,8 @@ class GalaxyNumberDensity(BaseObservable):
         """
         Indices of the (flat) coordinates of the data and model vectors.
         """
-        return{'bin_idx': list(range(len(self.separation)))}
+        return{'bin_idx': list(range(4 * len(self.separation)))}
 
     @property
     def model_fn(self):
-        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/GalaxyNumberDensity/cosmo+hod/last.ckpt'
+        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/best/VIDEVoidGalaxyDensityProfile/last.ckpt'

@@ -8,8 +8,8 @@ class GalaxyOverdensityPDF(BaseObservable):
     """
     def __init__(self, phase_correction=False, **kwargs):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.stat_name = 'pdf_r10'
-        self.sep_name = 'delta'
+        self.stat_name = 'pdf'
+        self.sep_name = 'bin_idx'
 
         if phase_correction and hasattr(self, 'compute_phase_correction'):
             self.logger.info('Computing phase correction.')
@@ -24,7 +24,7 @@ class GalaxyOverdensityPDF(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)) + list(range(100, 127)) + list(range(130, 182)),
-            'hod_idx': list(range(100)),
+            'hod_idx': list(range(350)),
         }
 
     @property
@@ -34,7 +34,7 @@ class GalaxyOverdensityPDF(BaseObservable):
         """
         return {
             'cosmo_idx': list(range(0, 5)) + list(range(13, 14)),
-            'hod_idx': list(range(100)),
+            'hod_idx': list(range(350)),
         }
 
     @property
@@ -43,7 +43,7 @@ class GalaxyOverdensityPDF(BaseObservable):
         Coordinates of the data and model vectors.
         """
         return{
-            'delta': self.separation,
+            self.sep_name: self.separation,
         }
     
     @property
@@ -55,4 +55,5 @@ class GalaxyOverdensityPDF(BaseObservable):
 
     @property
     def model_fn(self):
-        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/pdf_r10/cosmo+hod/optuna/last-v13.ckpt'
+        # return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/pdf_r10/cosmo+hod/optuna/last-v13.ckpt'
+        return f'/pscratch/sd/e/epaillas/emc/v1.1/trained_models/best/GalaxyOverdensityPDF/last.ckpt'

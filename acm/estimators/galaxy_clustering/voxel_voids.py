@@ -8,6 +8,7 @@ from pathlib import Path
 from .src import fastmodules
 from .base import BaseEnvironmentEstimator
 
+
 class VoxelVoids(BaseEnvironmentEstimator):
     """
     Class to calculate voxel voids, as in https://github.com/seshnadathur/Revolver
@@ -17,6 +18,51 @@ class VoxelVoids(BaseEnvironmentEstimator):
         self.logger.info('Initializing VoxelVoids.')
         super().__init__(**kwargs)
         self.handle = Path(temp_dir) / str(uuid.uuid4())
+
+    def set_density_contrast(self, smoothing_radius=None, check=False, ran_min=0.01, save_wisdom=False):
+        """
+        Set the density contrast.
+
+        Parameters
+        ----------
+        smoothing_radius : float, optional
+            Smoothing radius.
+        check : bool, optional
+            Check if there are enough randoms.
+        ran_min : float, optional
+            Minimum randoms.
+        nquery_factor : int, optional
+            Factor to multiply the number of data points to get the number of query points.
+            
+        Returns
+        -------
+        delta_mesh : array_like
+            Density contrast.
+        """
+        t0 = time.time()
+        if smoothing_radius:
+            self.data_mesh.smooth_gaussian(smoothing_radius, engine='fftw', save_wisdom=save_wisdom,)
+        if self.has_randoms:
+            if check:
+                mask_nonzero = self.randoms_mesh.value > 0.
+                nnonzero = mask_nonzero.sum()
+                if nnonzero < 2: raise ValueError('Very few randoms.')
+            if smoothing_radius:
+                self.randoms_mesh.smooth_gaussian(smoothing_radius, engine='fftw', save_wisdom=save_wisdom)
+            sum_data, sum_randoms = np.sum(self.data_mesh.value), np.sum(self.randoms_mesh.value)
+            alpha = sum_data * 1. / sum_randoms
+            self.delta_mesh = self.data_mesh - alpha * self.randoms_mesh
+            self.rho_mesh = self.data_mesh
+            self.ran_min = ran_min * sum_randoms / self._size_randoms
+            mask = self.randoms_mesh > self.ran_min
+            self.delta_mesh[mask] /= alpha * self.randoms_mesh[mask]
+            self.delta_mesh[~mask] = 0.0
+            self.rho_mesh[mask] /= alpha * self.randoms_mesh[mask]
+            self.rho_mesh[~mask] = 0.9e30
+        else:
+            self.delta_mesh = self.data_mesh / np.mean(self.data_mesh) - 1.
+        self.logger.info(f'Set density contrast in {time.time() - t0:.2f} seconds.')
+        return self.delta_mesh
 
     def find_voids(self):
         """
@@ -35,11 +81,11 @@ class VoxelVoids(BaseEnvironmentEstimator):
         """
         self.logger.info("Finding voids.")
         nmesh = self.delta_mesh.nmesh
-        delta_mesh_flat = np.array(self.delta_mesh, dtype=np.float32)
-        with open(f'{self.handle}_delta_mesh_n{nmesh[0]}{nmesh[1]}{nmesh[2]}d.dat', 'w') as F:
-            delta_mesh_flat.tofile(F, format='%f')
-        bin_path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), './src', 'jozov-grid.exe')
-        cmd = [bin_path, "v", f"{self.handle}_delta_mesh_n{nmesh[0]}{nmesh[1]}{nmesh[2]}d.dat",
+        rho_mesh_flat = np.array(self.rho_mesh, dtype=np.float32)
+        with open(f'{self.handle}_rho_mesh_n{nmesh[0]}{nmesh[1]}{nmesh[2]}d.dat', 'w') as F:
+            rho_mesh_flat.tofile(F, format='%f')
+        bin_path  = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'jozov-grid.exe')
+        cmd = [bin_path, "v", f"{self.handle}_rho_mesh_n{nmesh[0]}{nmesh[1]}{nmesh[2]}d.dat",
                self.handle, str(nmesh[0]),str(nmesh[1]),str(nmesh[2])]
         subprocess.call(cmd)
 
@@ -79,7 +125,7 @@ class VoxelVoids(BaseEnvironmentEstimator):
         os.remove(f'{self.handle}.void')
         os.remove(f'{self.handle}.txt')
         os.remove(f'{self.handle}.zone')
-        os.remove(f'{self.handle}_delta_mesh_n{nmesh[0]}{nmesh[1]}{nmesh[2]}d.dat')
+        os.remove(f'{self.handle}_rho_mesh_n{nmesh[0]}{nmesh[1]}{nmesh[2]}d.dat')
         return np.c_[xpos, ypos, zpos], rads
 
     def voxel_position(self, voxel):

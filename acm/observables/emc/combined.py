@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import linalg
 from .base import BaseObservable
 
 
@@ -106,13 +107,11 @@ class CombinedObservable:
         """
         return np.concatenate([obs.get_model_prediction(x) for obs in self.observables], axis=-1)
 
-
-    @property
-    def emulator_error(self):
+    def get_emulator_error(self, method: ['median', 'std'] = 'median'):
         """
         Emulator error of the combination of observables.
         """
-        return np.concatenate([obs.emulator_error for obs in self.observables], axis=0)
+        return np.concatenate([obs.get_emulator_error(method) for obs in self.observables], axis=0)
 
     @property
     def coords_model(self):
@@ -149,15 +148,43 @@ class CombinedObservable:
         """
         return [obs.model_fn for obs in self.observables]
 
-    def get_emulator_error(self, method: ['mae', 'cov'] = 'mae'):
+    def get_model_residuals(self, select_mocks=None):
         """
-        Calculate the emulator error from a subset of the Latin hypercube,
-        which we treat as the test set.
+        Get the residuals of the model.
+        
+        Returns
+        -------
+        array_like
+            Residuals of the model.
+        """
+        return np.concatenate([obs.get_model_residuals(select_mocks) for obs in self.observables], axis=1)
 
-        We make a new instance of the class with the test set filters and
-        compare the emulator prediction to the true values.
+    def get_emulator_error_matrix(self, select_mocks=None, diagonalize=True,
+        method: ['median', 'std'] = 'median', block_diagonal=False):
         """
-        return np.concatenate([obs.get_emulator_error(method) for obs in self.observables], axis=0)
+        Get the covariance matrix of the emulator error.
+        """
+        if block_diagonal:
+            covs = []
+            for obs in self.observables:
+                cov = obs.get_emulator_error_matrix(
+                    select_mocks=select_mocks, diagonalize=diagonalize, method=method
+                )
+                covs.append(cov)
+            return linalg.block_diag(*covs)
+        else:
+            res = self.get_model_residuals(select_mocks=select_mocks)
+            if method == 'median':
+                error = np.median(np.abs(res), axis=0)
+                if diagonalize is False:
+                    raise ValueError('Method "median" only works with diagonalize=True')
+                return np.diag(error ** 2)
+            elif method == 'std':
+                cov = np.cov(res.T)
+                if diagonalize is False:
+                    return cov
+                else:
+                    return np.diag(np.diag(cov))
 
     def get_covariance_matrix(self, divide_factor=64):
         """
