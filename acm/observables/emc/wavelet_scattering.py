@@ -38,15 +38,6 @@ class WaveletScatteringTransform(BaseObservable):
         }
 
     @property
-    def small_box_indices(self):
-        """
-        Indices of the covariance samples, including variations in phase and HOD parameters.
-        """
-        return {
-            'phase_idx': list(range(1786)),
-        }
-
-    @property
     def coordinates(self):
         """
         Coordinates of the data and model vectors.

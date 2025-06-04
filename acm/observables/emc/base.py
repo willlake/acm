@@ -131,11 +131,22 @@ class BaseObservable(ABC):
         ).values.reshape(-1)
 
     @property
+    def small_box_indices(self):
+        """
+        Indices of the covariance samples, including variations in phase and HOD parameters.
+        """
+        return {
+            'phase_idx': range(1786),
+        }
+
+    @property
     def small_box_y(self):
         """
         Output features from the small AbacusSummit box for covariance
         estimation.
         """
+        #TODO: Get rid of the outlier stuff after void measurements are fixed
+        outlier_indices = [127, 180, 344, 484, 588, 653, 1142, 1231, 1275, 1466, 1526, 1592,]
         fn = self.small_box_fname()
         small_box_y = np.load(fn, allow_pickle=True).item()['cov_y']
         coords = self.small_box_indices
@@ -146,10 +157,12 @@ class BaseObservable(ABC):
         coords_shape = tuple(len(v) for k, v in coords.items())
         dimensions = list(coords.keys())
         small_box_y = small_box_y.reshape(*coords_shape)
-        return convert_to_summary(
+        small_box_y = convert_to_summary(
             data=small_box_y, dimensions=dimensions, coords=coords,
             select_filters=self.select_filters, slice_filters=self.slice_filters
-        ).values.reshape(len(small_box_y), -1)
+        )
+        small_box_y = small_box_y.sel(phase_idx= [i for i in list(range(1786)) if i not in outlier_indices],)
+        return small_box_y.values.reshape(len(small_box_y), -1)
 
     def diffsky_y(self, phase_idx=1, sampling='mass_conc'):
         """

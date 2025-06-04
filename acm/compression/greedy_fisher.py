@@ -4,6 +4,9 @@ import acm.observables.emc as emc
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "" 
 
+# 1) Visualize derivatives + Fisher matrices
+# 2) is any ill conditioned?
+
 def is_well_conditioned(matrix, threshold=1e10):
     condition_number = np.linalg.cond(matrix)
     return condition_number < threshold, condition_number
@@ -20,6 +23,8 @@ def safe_inverse(matrix,):
         except np.linalg.LinAlgError:
             print("Regular inversion failed despite good condition number")
             pass
+    else:
+        print('Matrix is ill-conditioned, using pseudo-inverse')
     return np.linalg.pinv(matrix)
 
 def get_pseudodeterminant(matrix, epsilon=1.e-10): 
@@ -28,7 +33,26 @@ def get_pseudodeterminant(matrix, epsilon=1.e-10):
     significant_s = s[s > threshold]
     return np.sum(np.log(significant_s))
 
-def safe_log_determinant(matrix, epsilon=1e-10):
+def get_marginalized_fisher(full_fisher_matrix, parameter_idx):
+    M = full_fisher_matrix.shape[0]
+    all_idx = np.arange(M)
+    marginalize_idx = np.array([i for i in all_idx if i not in parameter_idx])
+    
+    F_aa = full_fisher_matrix[np.ix_(parameter_idx, parameter_idx)]
+    F_ab = full_fisher_matrix[np.ix_(parameter_idx, marginalize_idx)]
+    F_ba = full_fisher_matrix[np.ix_(marginalize_idx, parameter_idx)]
+    F_bb = full_fisher_matrix[np.ix_(marginalize_idx, marginalize_idx)]
+    
+    # Compute the Schur complement
+    try:
+        F_bb_inv = np.linalg.inv(F_bb)
+    except np.linalg.LinAlgError:
+        F_bb_inv = np.linalg.pinv(F_bb)
+    F_marginalized = F_aa - F_ab.dot(F_bb_inv.dot(F_ba))
+    return F_marginalized
+
+def safe_log_determinant(matrix, epsilon=1e-10,):
+
     is_stable, cond_num = is_well_conditioned(matrix)
     if is_stable:
         try:
@@ -38,40 +62,54 @@ def safe_log_determinant(matrix, epsilon=1e-10):
         except np.linalg.LinAlgError:
             print("Regular log-determinant failed despite good condition number")
             pass
+    print('Matrix is ill-conditioned, using pseudo-log-determinant')
     return get_pseudodeterminant(matrix, epsilon)
 
 
-def get_gradient(statistic):
+def get_gradient(statistic,): 
     fiducial_parameters = statistic.lhc_x
     fiducial_parameters = torch.tensor(fiducial_parameters.astype(np.float32), requires_grad=True,).unsqueeze(0)
     def model_fn(x_batch):
         return statistic.model.get_prediction(x_batch)
-    return torch.func.jacrev(model_fn)(fiducial_parameters).detach().squeeze().numpy()
+    gradients = torch.func.jacrev(model_fn)(fiducial_parameters).detach().squeeze().numpy()
+    return gradients
 
 
-def get_individual_fisher_information(statistic, add_inverse_correction=True, add_emulator_error=True, volume_factor=64.):
+def get_individual_fisher_information(statistic, add_inverse_correction=True, add_emulator_error=True, volume_factor=64., parameter_idx=None, return_matrix=False, emulator_error_method='mae', skip_every=1, fixed_parameters_idx=None,):
     small_box_y = statistic.small_box_y
     fiducial_parameters = statistic.lhc_x
     prefactor = 1 / volume_factor
     covariance_matrix = prefactor * np.cov(small_box_y.T)
     if add_emulator_error:
         covariance_matrix += statistic.get_emulator_error()**2
+        # if emulator_error_method == 'mae':
+        #     covariance_matrix += statistic.get_emulator_error(method=emulator_error_method)**2
+        # elif emulator_error_method == 'cov':
+        #     covariance_matrix += statistic.get_emulator_error(method=emulator_error_method)
     if add_inverse_correction:
         correction = statistic.get_covariance_correction(
             n_s = len(small_box_y),
             n_d = len(covariance_matrix),
             n_theta = fiducial_parameters.shape[-1],
-            method='percival',
+            method='percival-fisher',
         )
     else:
         correction = 1.
-    print('correction = ', correction)
     precision_matrix = safe_inverse(correction * covariance_matrix)
-    gradients = get_gradient(statistic)
+    gradients = get_gradient(statistic,) 
+    if fixed_parameters_idx is not None:
+        gradients = np.delete(gradients, fixed_parameters_idx, axis=1)
+    if skip_every > 1:
+        gradients = gradients[::skip_every]
+        precision_matrix = precision_matrix[::skip_every, ::skip_every]
     fisher_matrix = np.dot(gradients.T, np.dot(precision_matrix, gradients))
-    return safe_log_determinant(fisher_matrix)
+    if parameter_idx is not None:
+        fisher_matrix = get_marginalized_fisher(fisher_matrix, parameter_idx)
+    if return_matrix:
+        return fisher_matrix
+    return safe_log_determinant(fisher_matrix,)
 
-def precompute_derivatives_and_covariance_simulations(statistics):
+def precompute_derivatives_and_covariance_simulations(statistics,):
     precomputed = {
         'derivatives': {},
         'covariance_simulations': {},
@@ -79,7 +117,7 @@ def precompute_derivatives_and_covariance_simulations(statistics):
     }
     precomputed['derivatives'] = {}
     for stat_str, statistic in statistics.items():
-        precomputed['derivatives'][stat_str] = get_gradient(statistic)
+        precomputed['derivatives'][stat_str] = get_gradient(statistic,) 
         precomputed['covariance_simulations'][stat_str] = statistic.small_box_y
         precomputed['emulator_error'][stat_str] = statistic.get_emulator_error()**2
         precomputed['bin_counts'] = precomputed['derivatives'][stat_str].shape[1]
@@ -121,7 +159,7 @@ def compute_precision_matrices(
             n_s=n_mocks,
             n_d=n_dim,
             n_theta=list(statistics.values())[0].lhc_x.shape[-1],
-            method='percival',
+            method='percival-fisher',
         )
     else:
         correction = 1.
@@ -166,7 +204,7 @@ def get_maximum_fisher_idx(
     )
     fisher_matrices = get_batch_fisher_matrices(augmented_gradients, precision_matrices)
     fisher_information = np.array(
-        [safe_log_determinant(fisher_matrices[i]) for i in range(fisher_matrices.shape[0])]
+        [safe_log_determinant(fisher_matrices[i], parameter_idx=parameter_idx,) for i in range(fisher_matrices.shape[0])]
     )
     max_fisher_idx = np.argmax(fisher_information)
     return max_fisher_idx, fisher_information[max_fisher_idx]
@@ -178,9 +216,10 @@ def greedy_bin_selection(
     add_emulator_error=False,
     add_inverse_correction=True,
     patience=5,           
-    min_improvement=0.001  
+    min_improvement=0.001,
+    parameter_idx=None,
 ):
-    precomputed = precompute_derivatives_and_covariance_simulations(statistics)
+    precomputed = precompute_derivatives_and_covariance_simulations(statistics,) 
     available_bins = {stat: list(range(precomputed['derivatives'][stat].shape[0])) for stat in statistics}
     print('Total available bins:', sum([len(bins) for _, bins in available_bins.items()]))
     selected_bins = {stat: [] for stat in statistics}
@@ -320,7 +359,7 @@ def greedy_bin_selection(
     
     return selected_bins, current_fisher, all_fisher_values
 
-def run_greedy_fisher(statistics, max_bins=100, add_emulator_error=False, add_inverse_correction=True,):
+def run_greedy_fisher(statistics, max_bins=100, add_emulator_error=False, add_inverse_correction=True, parameter_idx=None):
     print(f"Precomputing data for statistics: {statistics}")
     
     print(f"\nRunning greedy selection with max_bins={max_bins}")
@@ -329,6 +368,7 @@ def run_greedy_fisher(statistics, max_bins=100, add_emulator_error=False, add_in
         max_bins=max_bins, 
         add_emulator_error=add_emulator_error,
         add_inverse_correction=add_inverse_correction,
+        parameter_idx=parameter_idx,
     )
     
     print("\nFinal selection:")
@@ -340,6 +380,7 @@ def run_greedy_fisher(statistics, max_bins=100, add_emulator_error=False, add_in
     return selected_bins, final_fisher, all_fisher_values
 
 if __name__ == '__main__':
+    parameter_idx = None #list(range(1,8))
     select_mocks={'cosmo_idx': [0], 'hod_idx': [30,],}
     statistics = {
         'tpcf': emc.GalaxyCorrelationFunctionMultipoles(
@@ -375,21 +416,24 @@ if __name__ == '__main__':
 
 
     for stat_str, statistic in statistics.items():
-        # print(stat_str)
-        # selected_bins, final_fisher, all_fisher_values = run_greedy_fisher(
-        #     {stat_str: statistic},
-        #     max_bins=100, 
-        #     add_emulator_error=True,
-        #     add_inverse_correction=True,
-        # )
-        # print(f"Greedy Fisher log-determinant: {final_fisher:.4f}")
         fisher_information = get_individual_fisher_information(
             statistic,
             add_inverse_correction=True,
             add_emulator_error=True,
+            parameter_idx=parameter_idx,
         )
-        print(f"Individual Fisher information: {stat_str} = {fisher_information:.4f}")
+
+        print(f"Marginalized Fisher information: {stat_str} = {fisher_information:.4f}")
+        if parameter_idx is not None:
+            fisher_information = get_individual_fisher_information(
+                statistic,
+                add_inverse_correction=True,
+                add_emulator_error=True,
+                parameter_idx=None,
+            )
+            print(f"Fisher information: {stat_str} = {fisher_information:.4f}")
         print('*'*100)
+
 
 
     selected_bins, final_fisher, all_fisher_values = run_greedy_fisher(
@@ -397,5 +441,10 @@ if __name__ == '__main__':
         max_bins=100, 
         add_emulator_error=True,
         add_inverse_correction=True,
+        parameter_idx=parameter_idx,
     )
     print(f"Greedy Fisher log-determinant: {final_fisher:.4f}")
+
+
+    # ill conditioned inverse: dsc_pk
+    # ill conditioned fisher determinant: tpcf, wst, wp
