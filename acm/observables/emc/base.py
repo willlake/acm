@@ -13,8 +13,8 @@ class BaseModel(ABC):
     def __init__(self, observable):
         self.observable = observable
 
-    def get_prediction(self, x):
-        return self.observable.get_model_prediction(x)
+    def get_prediction(self, x, return_tensor=True, no_grad=True,):
+        return self.observable.get_model_prediction(x, return_tensor=return_tensor, no_grad=no_grad,)
 
 
 class BaseObservable(ABC):
@@ -293,7 +293,7 @@ class BaseObservable(ABC):
         n_samples = len(select_mocks['cosmo_idx']) * len(select_mocks['hod_idx'])
         test_x = test_x.reshape(n_samples, -1)
         test_y = test_y.reshape(n_samples, -1)
-        pred_y = observable.get_model_prediction(test_x, batch=True)
+        pred_y = observable.get_model_prediction(test_x, batch=True, return_tensor=False)
         return test_y - pred_y
 
     def get_model_residuals_list(self):
@@ -331,7 +331,7 @@ class BaseObservable(ABC):
         fn = self.lhc_fname()
         return np.load(fn, allow_pickle=True).item()[self.sep_name]
 
-    def get_model_prediction(self, x, batch=True):
+    def get_model_prediction(self, x, batch=True, return_tensor=True, no_grad=True,):
         """
         Get model prediction for a given x.
 
@@ -341,9 +341,15 @@ class BaseObservable(ABC):
         Returns:
             np.ndarray: Model prediction.
         """
-        with torch.no_grad():
-            prediction = self.checkpoint.get_prediction(torch.Tensor(x))
-            prediction = prediction.numpy()
+        if no_grad:
+            with torch.no_grad():
+                prediction = self.checkpoint.get_prediction(torch.Tensor(x))
+        else:
+            with torch.enable_grad():
+                prediction = self.checkpoint.get_prediction(torch.Tensor(x))
+        if return_tensor:
+            return prediction
+        prediction = prediction.numpy()
         if hasattr(self, 'phase_correction'):
             prediction = self.apply_phase_correction(prediction)
         coords = self.coordinates_indices if self.select_indices else self.coordinates

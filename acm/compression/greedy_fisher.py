@@ -24,8 +24,8 @@ def safe_inverse(matrix,):
             print("Regular inversion failed despite good condition number")
             pass
     else:
-        print('Matrix is ill-conditioned, using pseudo-inverse')
-    return np.linalg.pinv(matrix)
+        #print('Matrix is ill-conditioned, using pseudo-inverse')
+        return np.linalg.pinv(matrix)
 
 def get_pseudodeterminant(matrix, epsilon=1.e-10): 
     U, s, Vh = np.linalg.svd(matrix)
@@ -62,7 +62,7 @@ def safe_log_determinant(matrix, epsilon=1e-10,):
         except np.linalg.LinAlgError:
             print("Regular log-determinant failed despite good condition number")
             pass
-    print('Matrix is ill-conditioned, using pseudo-log-determinant')
+    #print('Matrix is ill-conditioned, using pseudo-log-determinant')
     return get_pseudodeterminant(matrix, epsilon)
 
 
@@ -70,7 +70,7 @@ def get_gradient(statistic,):
     fiducial_parameters = statistic.lhc_x
     fiducial_parameters = torch.tensor(fiducial_parameters.astype(np.float32), requires_grad=True,).unsqueeze(0)
     def model_fn(x_batch):
-        return statistic.model.get_prediction(x_batch)
+        return statistic.model.get_prediction(x_batch, return_tensor=True, no_grad=False,)
     gradients = torch.func.jacrev(model_fn)(fiducial_parameters).detach().squeeze().numpy()
     return gradients
 
@@ -81,11 +81,12 @@ def get_individual_fisher_information(statistic, add_inverse_correction=True, ad
     prefactor = 1 / volume_factor
     covariance_matrix = prefactor * np.cov(small_box_y.T)
     if add_emulator_error:
-        covariance_matrix += statistic.get_emulator_error()**2
-        # if emulator_error_method == 'mae':
-        #     covariance_matrix += statistic.get_emulator_error(method=emulator_error_method)**2
-        # elif emulator_error_method == 'cov':
-        #     covariance_matrix += statistic.get_emulator_error(method=emulator_error_method)
+        covariance_matrix += statistic.get_emulator_error_matrix(
+            method='std', diagonalize=False,
+        )
+        #covariance_matrix += statistic.get_emulator_error()**2
+
+
     if add_inverse_correction:
         correction = statistic.get_covariance_correction(
             n_s = len(small_box_y),
@@ -166,9 +167,13 @@ def compute_precision_matrices(
     precision_matrices = np.zeros((n_options, n_dim, n_dim))
     prefactor = 1 / volume_factor
     for i in range(n_options):
+        #print(f'********************* OPTION {i}')
         covariance_matrix = np.atleast_2d(prefactor*np.cov(covariance_mocks[i].T))
         if add_emulator_error:
+            #print('selected_bin_emulator_error = ', selected_bin_emulator_error.shape)
+            #print('available_bin_emulator_error = ', available_bin_emulator_error[i].shape)
             error = np.hstack((selected_bin_emulator_error, available_bin_emulator_error[i]))
+            #print('error = ', error.shape)
             covariance_matrix += np.diag(error)
         precision_matrices[i] = safe_inverse(correction * covariance_matrix)
     return precision_matrices 
@@ -204,7 +209,7 @@ def get_maximum_fisher_idx(
     )
     fisher_matrices = get_batch_fisher_matrices(augmented_gradients, precision_matrices)
     fisher_information = np.array(
-        [safe_log_determinant(fisher_matrices[i], parameter_idx=parameter_idx,) for i in range(fisher_matrices.shape[0])]
+        [safe_log_determinant(fisher_matrices[i],) for i in range(fisher_matrices.shape[0])]
     )
     max_fisher_idx = np.argmax(fisher_information)
     return max_fisher_idx, fisher_information[max_fisher_idx]
@@ -230,7 +235,7 @@ def greedy_bin_selection(
     selected_bin_data = np.zeros(
         (precomputed['covariance_simulations'][list(statistics.keys())[0]].shape[0], 0)
     )
-    selected_emulator_error = np.zeros((0,))
+    selected_bin_emulator_error = np.zeros((0,))
 
     # Track Fisher 
     current_fisher = float('-inf')
@@ -271,7 +276,7 @@ def greedy_bin_selection(
                 available_bin_gradients=stat_gradients,
                 selected_bin_data=selected_bin_data,
                 available_bin_data=stat_covs,
-                selected_bin_emulator_error=selected_emulator_error,
+                selected_bin_emulator_error=selected_bin_emulator_error,
                 available_bin_emulator_error=stat_emulator_error,
                 add_emulator_error=add_emulator_error,
                 add_inverse_correction=add_inverse_correction,
