@@ -38,15 +38,6 @@ class DTVoidGalaxyCorrelationFunctionMultipoles(BaseObservable):
             'hod_idx': list(range(270)),
         }
 
-    @property
-    def small_box_indices(self):
-        """
-        Indices of the covariance samples, including variations in phase and HOD parameters.
-        """
-        return {
-            # 'phase_idx': list(range(1786)),
-            'phase_idx': [i for i in list(range(1786)) if i not in [3319, 3325, 3377, 3569, 3679, 3879, 3902, 4206, 4261, 4300, 4326, 4334, 4416, 4556, 4558, 4650]],
-        }
 
     @property
     def coordinates(self):

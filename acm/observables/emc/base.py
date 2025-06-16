@@ -13,8 +13,8 @@ class BaseModel(ABC):
     def __init__(self, observable):
         self.observable = observable
 
-    def get_prediction(self, x):
-        return self.observable.get_model_prediction(x)
+    def get_prediction(self, x, return_tensor=True, no_grad=True,):
+        return self.observable.get_model_prediction(x, return_tensor=return_tensor, no_grad=no_grad,)
 
 
 class BaseObservable(ABC):
@@ -142,11 +142,22 @@ class BaseObservable(ABC):
         ).values.reshape(-1)
 
     @property
+    def small_box_indices(self):
+        """
+        Indices of the covariance samples, including variations in phase and HOD parameters.
+        """
+        return {
+            'phase_idx': range(1786),
+        }
+
+    @property
     def small_box_y(self):
         """
         Output features from the small AbacusSummit box for covariance
         estimation.
         """
+        #TODO: Get rid of the outlier stuff after void measurements are fixed
+        outlier_indices = [127, 180, 344, 484, 588, 653, 1142, 1231, 1275, 1466, 1526, 1592,]
         fn = self.small_box_fname()
         small_box_y = np.load(fn, allow_pickle=True).item()['cov_y']
         coords = self.small_box_indices
@@ -157,10 +168,12 @@ class BaseObservable(ABC):
         coords_shape = tuple(len(v) for k, v in coords.items())
         dimensions = list(coords.keys())
         small_box_y = small_box_y.reshape(*coords_shape)
-        return convert_to_summary(
+        small_box_y = convert_to_summary(
             data=small_box_y, dimensions=dimensions, coords=coords,
             select_filters=self.select_filters, slice_filters=self.slice_filters
-        ).values.reshape(len(small_box_y), -1)
+        )
+        small_box_y = small_box_y.sel(phase_idx= [i for i in list(range(1786)) if i not in outlier_indices],)
+        return small_box_y.values.reshape(len(small_box_y), -1)
 
     def diffsky_y(self, phase_idx=1, sampling='mass_conc'):
         """
@@ -280,7 +293,7 @@ class BaseObservable(ABC):
         n_samples = len(select_mocks['cosmo_idx']) * len(select_mocks['hod_idx'])
         test_x = test_x.reshape(n_samples, -1)
         test_y = test_y.reshape(n_samples, -1)
-        pred_y = observable.get_model_prediction(test_x, batch=True)
+        pred_y = observable.get_model_prediction(test_x, batch=True, return_tensor=False)
         return test_y - pred_y
 
     def get_model_residuals_list(self):
@@ -318,7 +331,7 @@ class BaseObservable(ABC):
         fn = self.lhc_fname()
         return np.load(fn, allow_pickle=True).item()[self.sep_name]
 
-    def get_model_prediction(self, x, batch=True):
+    def get_model_prediction(self, x, batch=True, return_tensor=True, no_grad=True,):
         """
         Get model prediction for a given x.
 
@@ -328,9 +341,15 @@ class BaseObservable(ABC):
         Returns:
             np.ndarray: Model prediction.
         """
-        with torch.no_grad():
-            prediction = self.checkpoint.get_prediction(torch.Tensor(x))
-            prediction = prediction.numpy()
+        if no_grad:
+            with torch.no_grad():
+                prediction = self.checkpoint.get_prediction(torch.Tensor(x))
+        else:
+            with torch.enable_grad():
+                prediction = self.checkpoint.get_prediction(torch.Tensor(x))
+        if return_tensor:
+            return prediction
+        prediction = prediction.numpy()
         if hasattr(self, 'phase_correction'):
             prediction = self.apply_phase_correction(prediction)
         coords = self.coordinates_indices if self.select_indices else self.coordinates
