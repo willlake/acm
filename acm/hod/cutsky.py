@@ -108,8 +108,8 @@ class CutskyHOD:
 
     def run(
             self, hod_params: dict, nthreads: int = 1, seed: float = 0, 
-            generate_randoms: bool = False, replications: bool = True,
-            alpha_randoms: int = 5, randoms_seed: float = 42):
+            generate_randoms: bool = False, replications: list = [-1, 0, 1],
+            alpha_randoms: int = 5, randoms_seed: float = 42,):
         data = self.init_data()
         randoms = self.init_randoms() if generate_randoms else None
 
@@ -122,7 +122,7 @@ class CutskyHOD:
                 pos_box, vel_box = self.sample_hod(ball, hod_params, nthreads=nthreads, seed=seed)
 
             # replicate the box along each axis to cover more volume
-            shifts = self.get_box_shifts(mappings=[-1, 0, 1])  # shifts to translate particle positions
+            shifts = self.get_box_shifts(mappings=replications)  # shifts to translate particle positions
             pos_rep, vel_rep, boxcenter_rep = self.get_box_replications(pos_box, vel_box, shifts=shifts,
                                                                         boxcenter=self.boxcenter)
             data_nbar = len(pos_box) / (self.boxsize_snapshot ** 3)
