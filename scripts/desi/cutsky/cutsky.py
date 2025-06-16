@@ -104,7 +104,7 @@ hod_params = get_hod_params()
 # load abacusHOD class
 abacus = CutskyHOD(varied_params=hod_params.keys(),
                    zranges=zranges, snapshots=snapshots,
-                   cosmo_idx=0, phase_idx=0, debug=True)
+                   cosmo_idx=0, phase_idx=0)
 
 # sample HOD parameters and build the cutsky mock
 hod = {key: hod_params[key][30] for key in hod_params.keys()}
