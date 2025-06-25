@@ -1,0 +1,87 @@
+[build-system]
+requires = [
+    "setuptools", 
+    "wheel", 
+    "cython",
+    "numpy < 2.0.0", # Avoid numpy 2.0.0 for now for type errors in Cython
+]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "acm"
+description = "Alternative Clustering Methods"
+readme = "README.md"
+version = "0.2.0"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+requires-python = ">=3.9"
+dependencies = [ # Base requirements
+    "numpy",
+    "scipy",
+    "pandas", 
+    "pyyaml",
+    "matplotlib",
+    "getdist",
+]
+
+
+[project.optional-dependencies]
+# Environements
+nersc = [
+    # Estimators (base)
+    'polybin3d[mkl_fft] @ git+https://github.com/oliverphilcox/PolyBin3D',
+]
+comsodesi = [
+    # Estimators (base)
+    'pycorr[mpi,jackknife,corrfunc] @ git+https://github.com/cosmodesi/pycorr',
+    'pypower @ git+https://github.com/cosmodesi/pypower', 
+    'pyrecon @ git+https://github.com/cosmodesi/pyrecon@main',
+
+    # HOD
+    'astropy',
+    'abacusutils', #abacusnbody
+    'cosmoprimo[class,camb,astropy,extras] @ git+https://github.com/cosmodesi/cosmoprimo',
+    'mockfactory @ git+https://github.com/cosmodesi/mockfactory',
+]
+docs = [
+    "sphinx >= 4.2",
+    "sphinx-book-theme >= 0.3",
+    "myst_nb >= 0.17.1",
+]
+# Estimators
+knn = [
+    "numba",
+    "fast-histogram",
+    "pyfnntw",
+]
+mst = [
+    "mistreeplus",
+]
+minkowski = [
+    "kymatio",
+]
+# Model & inference
+sunbird = [ 
+    'sunbird @ git+https://github.com/florpi/sunbird',
+    # Just in case some dependencies are not installed 
+    # (TODO : remove when sunbird also handles its dependencies)
+    "xarray", 
+    "pytorch",
+    "optuna",
+    "joblib",
+    "emcee",
+    "pocomc",
+]
+
+
+[project.urls]
+Repository = "https://github.com/epaillas/acm.git"
+
+
+[tool.setuptools.packages.find]
+namespaces = false
